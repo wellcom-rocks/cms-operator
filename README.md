@@ -1,5 +1,7 @@
 # cms-operator
 
+[![Go](https://github.com/wellcom-rocks/cms-operator/actions/workflows/go.yml/badge.svg?branch=main)](https://github.com/wellcom-rocks/cms-operator/actions/workflows/go.yml)
+
 This project is a Kubernetes operator for managing CMS instances.
 
 ## Description
