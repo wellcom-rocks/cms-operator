@@ -291,11 +291,11 @@ func (r *GhostBlogReconciler) doFinalizerOperationsForGhostBlog(cr *cmsv1alpha1.
 // deploymentForGhostBlog returns a GhostBlog Deployment object
 func (r *GhostBlogReconciler) deploymentForGhostBlog(
 	ghostblog *cmsv1alpha1.GhostBlog) (*appsv1.Deployment, error) {
-	ls := labelsForGhostBlog(ghostblog.Name)
+	ls := labelsForGhostBlog(ghostblog.Name, ghostblog.Spec.Image)
 	replicas := ghostblog.Spec.Size
 
 	// Get the Operand image
-	image, err := imageForGhostBlog()
+	image, err := imageForGhostBlog(ghostblog.Spec.Image)
 	if err != nil {
 		return nil, err
 	}
@@ -380,9 +380,9 @@ func (r *GhostBlogReconciler) deploymentForGhostBlog(
 
 // labelsForGhostBlog returns the labels for selecting the resources
 // More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
-func labelsForGhostBlog(name string) map[string]string {
+func labelsForGhostBlog(name string, imageFromCrd string) map[string]string {
 	var imageTag string
-	image, err := imageForGhostBlog()
+	image, err := imageForGhostBlog(imageFromCrd)
 	if err == nil {
 		imageTag = strings.Split(image, ":")[1]
 	}
@@ -396,12 +396,19 @@ func labelsForGhostBlog(name string) map[string]string {
 
 // imageForGhostBlog gets the Operand image which is managed by this controller
 // from the GHOSTBLOG_IMAGE environment variable defined in the config/manager/manager.yaml
-func imageForGhostBlog() (string, error) {
-	var imageEnvVar = "GHOSTBLOG_IMAGE"
-	image, found := os.LookupEnv(imageEnvVar)
-	if !found {
-		return "", fmt.Errorf("unable to find %s environment variable with the image", imageEnvVar)
+func imageForGhostBlog(imageFromCrd string) (string, error) {
+	image := "ghost:latest"
+
+	if imageFromCrd != "" {
+		image = imageFromCrd
 	}
+
+	var imageEnvVar = "GHOSTBLOG_IMAGE"
+	imageFromEnv, found := os.LookupEnv(imageEnvVar)
+	if found {
+		image = imageFromEnv
+	}
+
 	return image, nil
 }
 
