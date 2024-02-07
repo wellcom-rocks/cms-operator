@@ -9,4 +9,12 @@ metadata:
     app.kubernetes.io/created-by: cms-operator
   name: ghostblog-sample
 spec:
-  # TODO(user): Add fields here
+  size: 1
+  containerPort: 2368
+  image: ghost:5.79.0
+  config:
+    url: http://ghost.example.com
+    database:
+      client: sqlite3
+      connection:
+        filename: /var/lib/ghost/content/data/ghost.db

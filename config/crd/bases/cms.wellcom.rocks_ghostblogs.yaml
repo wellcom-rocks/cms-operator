@@ -1,0 +1,247 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.12.0
+  name: ghostblogs.cms.wellcom.rocks
+spec:
+  group: cms.wellcom.rocks
+  names:
+    kind: GhostBlog
+    listKind: GhostBlogList
+    plural: ghostblogs
+    singular: ghostblog
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: GhostBlog is the Schema for the ghostblogs API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: GhostBlogSpec defines the desired state of GhostBlog
+            properties:
+              config:
+                description: Ghost configuration. This field will be written as ghost
+                  configuration. Saved in configmap and mounted in /etc/ghost/config/config.json
+                  and symlinked to /var/lib/ghost/config.production.json
+                properties:
+                  database:
+                    description: GhostDatabaseSpec defines ghost database config.
+                      https://ghost.org/docs/concepts/config/#database
+                    properties:
+                      client:
+                        description: Client is ghost database client.
+                        enum:
+                        - sqlite3
+                        - mysql
+                        type: string
+                      connection:
+                        properties:
+                          database:
+                            description: mysql database name
+                            type: string
+                          filename:
+                            description: sqlite filename.
+                            type: string
+                          host:
+                            description: mysql host
+                            type: string
+                          password:
+                            description: mysql database password of user
+                            type: string
+                          port:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: mysql port
+                            x-kubernetes-int-or-string: true
+                          user:
+                            description: mysql database user
+                            type: string
+                        type: object
+                    required:
+                    - client
+                    type: object
+                  server:
+                    properties:
+                      host:
+                        type: string
+                      port:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
+                    required:
+                    - host
+                    - port
+                    type: object
+                  url:
+                    type: string
+                required:
+                - database
+                - url
+                type: object
+              containerPort:
+                description: Port defines the port that will be used to init the container
+                  with the image
+                format: int32
+                type: integer
+              image:
+                description: Image defines the image that will be used to init the
+                  container
+                type: string
+              ingress:
+                description: GhostIngressSpec defines ingress
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: 'Additional annotations passed to ".metadata.annotations"
+                      in networking.k8s.io/ingress object. This is useful for configuring
+                      ingress through annotation field like: ingress-class, static-ip,
+                      etc'
+                    type: object
+                  enabled:
+                    type: boolean
+                  hosts:
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                  tls:
+                    description: GhostIngressTLSSpec defines ingress tls
+                    properties:
+                      enabled:
+                        type: boolean
+                      secretName:
+                        type: string
+                    required:
+                    - enabled
+                    - secretName
+                    type: object
+                required:
+                - enabled
+                type: object
+              persistent:
+                description: GhostPersistentSpec defines peristent volume
+                properties:
+                  enabled:
+                    type: boolean
+                  size:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: size of storage
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  storageClass:
+                    description: If defined, will create persistentVolumeClaim with
+                      spesific storageClass name. If undefined (the default) or set
+                      to null, no storageClassName spec is set, choosing the default
+                      provisioner.
+                    nullable: true
+                    type: string
+                required:
+                - enabled
+                - size
+                type: object
+              size:
+                description: Size defines the number of GhostBlog instances
+                format: int32
+                type: integer
+            required:
+            - config
+            type: object
+          status:
+            description: GhostBlogStatus defines the observed state of GhostBlog
+            properties:
+              conditions:
+                description: Conditions store the status conditions of the GhostBlog
+                  instances
+                items:
+                  description: "Condition contains details for one aspect of the current
+                    state of this API Resource. --- This struct is intended for direct
+                    use as an array at the field path .status.conditions.  For example,
+                    \n type FooStatus struct{ // Represents the observations of a
+                    foo's current state. // Known .status.conditions.type are: \"Available\",
+                    \"Progressing\", and \"Degraded\" // +patchMergeKey=type // +patchStrategy=merge
+                    // +listType=map // +listMapKey=type Conditions []metav1.Condition
+                    `json:\"conditions,omitempty\" patchStrategy:\"merge\" patchMergeKey:\"type\"
+                    protobuf:\"bytes,1,rep,name=conditions\"` \n // other fields }"
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition
+                        transitioned from one status to another. This should be when
+                        the underlying condition changed.  If that is not known, then
+                        using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating
+                        details about the transition. This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation
+                        that the condition was set based upon. For instance, if .metadata.generation
+                        is currently 12, but the .status.conditions[x].observedGeneration
+                        is 9, the condition is out of date with respect to the current
+                        state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating
+                        the reason for the condition's last transition. Producers
+                        of specific condition types may define expected values and
+                        meanings for this field, and whether the values are considered
+                        a guaranteed API. The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                        --- Many .condition.type values are consistent across resources
+                        like Available, but because arbitrary conditions can be useful
+                        (see .node.status.conditions), the ability to deconflict is
+                        important. The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
