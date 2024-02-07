@@ -392,8 +392,6 @@ func (r *GhostBlogReconciler) deploymentForGhostBlog(
 								Value: ghostblog.Spec.Config.Database.Client,
 							},
 						},
-
-						// Command: []string{"ghostblog", "-m=64", "-o", "modern", "-v"},
 					}},
 				},
 			},
