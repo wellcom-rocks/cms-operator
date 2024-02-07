@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -220,7 +221,7 @@ func (r *GhostBlogReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	foundPVC := &corev1.PersistentVolumeClaim{}
 	err = r.Get(ctx, types.NamespacedName{Name: ghostblog.Name + "-pvc", Namespace: ghostblog.Namespace}, foundPVC)
 	if err != nil && apierrors.IsNotFound(err) {
-		// Define a new deployment
+		// Define a new PersistantVolumelaim
 		pvc, err := r.persistantVolumeClaimForGhostBlog(ghostblog)
 		if err != nil {
 			log.Error(err, "Failed to define new PVC resource for GhostBlog")
@@ -252,6 +253,46 @@ func (r *GhostBlogReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{RequeueAfter: time.Minute}, nil
 	} else if err != nil {
 		log.Error(err, "Failed to get PVC")
+		// Let's return the error for the reconciliation be re-trigged again
+		return ctrl.Result{}, err
+	}
+
+	// Check if Servie already exists, if not create a new one
+	foundSVC := &corev1.Service{}
+	err = r.Get(ctx, types.NamespacedName{Name: ghostblog.Name, Namespace: ghostblog.Namespace}, foundSVC)
+	if err != nil && apierrors.IsNotFound(err) {
+		// Define a new Service
+		svc, err := r.serviceForGhostBlog(ghostblog)
+		if err != nil {
+			log.Error(err, "Failed to define new SVC resource for GhostBlog")
+
+			// The following implementation will update the status
+			meta.SetStatusCondition(&ghostblog.Status.Conditions, metav1.Condition{Type: typeAvailableGhostBlog,
+				Status: metav1.ConditionFalse, Reason: "Reconciling",
+				Message: fmt.Sprintf("Failed to create SVC for the custom resource (%s): (%s)", ghostblog.Name, err)})
+
+			if err := r.Status().Update(ctx, ghostblog); err != nil {
+				log.Error(err, "Failed to update GhostBlog status")
+				return ctrl.Result{}, err
+			}
+
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Creating a new PVC",
+			"PVC.Namespace", svc.Namespace, "PVC.Name", svc.Name)
+		if err = r.Create(ctx, svc); err != nil {
+			log.Error(err, "Failed to create new PVC",
+				"PVC.Namespace", svc.Namespace, "PVC.Name", svc.Name)
+			return ctrl.Result{}, err
+		}
+
+		// PVC created successfully
+		// We will requeue the reconciliation so that we can ensure the state
+		// and move forward for the next operations
+		return ctrl.Result{RequeueAfter: time.Minute}, nil
+	} else if err != nil {
+		log.Error(err, "Failed to get SVC")
 		// Let's return the error for the reconciliation be re-trigged again
 		return ctrl.Result{}, err
 	}
@@ -438,6 +479,33 @@ func (r *GhostBlogReconciler) persistantVolumeClaimForGhostBlog(
 		return nil, err
 	}
 	return pvc, nil
+}
+
+func (r *GhostBlogReconciler) serviceForGhostBlog(
+	ghostblog *cmsv1alpha1.GhostBlog) (*corev1.Service, error) {
+	ls := labelsForGhostBlog(ghostblog.Name, ghostblog.Spec.Image)
+
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ghostblog.Name,
+			Namespace: ghostblog.Namespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: ls,
+			Type:     corev1.ServiceTypeClusterIP,
+			Ports: []corev1.ServicePort{{
+				Port:       ghostblog.Spec.ContainerPort,
+				TargetPort: intstr.FromInt(int(ghostblog.Spec.ContainerPort)),
+			}},
+		},
+	}
+
+	// Set the ownerRef for the Service
+	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/owners-dependents/
+	if err := ctrl.SetControllerReference(ghostblog, svc, r.Scheme); err != nil {
+		return nil, err
+	}
+	return svc, nil
 }
 
 // labelsForGhostBlog returns the labels for selecting the resources
