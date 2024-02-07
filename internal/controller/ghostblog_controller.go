@@ -216,6 +216,46 @@ func (r *GhostBlogReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	// Check if the PersistentVolumeClaim already exists, if not create a new one
+	foundPVC := &corev1.PersistentVolumeClaim{}
+	err = r.Get(ctx, types.NamespacedName{Name: ghostblog.Name + "-pvc", Namespace: ghostblog.Namespace}, foundPVC)
+	if err != nil && apierrors.IsNotFound(err) {
+		// Define a new deployment
+		pvc, err := r.persistantVolumeClaimForGhostBlog(ghostblog)
+		if err != nil {
+			log.Error(err, "Failed to define new PVC resource for GhostBlog")
+
+			// The following implementation will update the status
+			meta.SetStatusCondition(&ghostblog.Status.Conditions, metav1.Condition{Type: typeAvailableGhostBlog,
+				Status: metav1.ConditionFalse, Reason: "Reconciling",
+				Message: fmt.Sprintf("Failed to create PVC for the custom resource (%s): (%s)", ghostblog.Name, err)})
+
+			if err := r.Status().Update(ctx, ghostblog); err != nil {
+				log.Error(err, "Failed to update GhostBlog status")
+				return ctrl.Result{}, err
+			}
+
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Creating a new PVC",
+			"PVC.Namespace", pvc.Namespace, "PVC.Name", pvc.Name)
+		if err = r.Create(ctx, pvc); err != nil {
+			log.Error(err, "Failed to create new PVC",
+				"PVC.Namespace", pvc.Namespace, "PVC.Name", pvc.Name)
+			return ctrl.Result{}, err
+		}
+
+		// PVC created successfully
+		// We will requeue the reconciliation so that we can ensure the state
+		// and move forward for the next operations
+		return ctrl.Result{RequeueAfter: time.Minute}, nil
+	} else if err != nil {
+		log.Error(err, "Failed to get PVC")
+		// Let's return the error for the reconciliation be re-trigged again
+		return ctrl.Result{}, err
+	}
+
 	// The CRD API is defining that the GhostBlog type, have a GhostBlogSpec.Size field
 	// to set the quantity of Deployment instances is the desired state on the cluster.
 	// Therefore, the following code will ensure the Deployment size is the same as defined
@@ -324,6 +364,7 @@ func (r *GhostBlogReconciler) deploymentForGhostBlog(
 							Type: corev1.SeccompProfileTypeRuntimeDefault,
 						},
 					},
+					Volumes: volumeForGhostBlog(ghostblog),
 					Containers: []corev1.Container{{
 						Image:           image,
 						Name:            "ghostblog",
@@ -354,16 +395,8 @@ func (r *GhostBlogReconciler) deploymentForGhostBlog(
 							ContainerPort: ghostblog.Spec.ContainerPort,
 							Name:          "ghostblog",
 						}},
-						Env: []corev1.EnvVar{
-							{
-								Name:  "database__connection__filename",
-								Value: ghostblog.Spec.Config.Database.Connection.Filename,
-							},
-							{
-								Name:  "database__client",
-								Value: ghostblog.Spec.Config.Database.Client,
-							},
-						},
+						Env:          envVariablesForGhostBlog(ghostblog),
+						VolumeMounts: volumeMountsForGhostBlog(ghostblog),
 					}},
 				},
 			},
@@ -376,6 +409,35 @@ func (r *GhostBlogReconciler) deploymentForGhostBlog(
 		return nil, err
 	}
 	return dep, nil
+}
+
+func (r *GhostBlogReconciler) persistantVolumeClaimForGhostBlog(
+	ghostblog *cmsv1alpha1.GhostBlog) (*corev1.PersistentVolumeClaim, error) {
+	// ls := labelsForGhostBlog(ghostblog.Name, ghostblog.Spec.Image)
+
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ghostblog.Name + "-pvc",
+			Namespace: ghostblog.Namespace,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteOnce,
+			},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: ghostblog.Spec.Persistent.Size,
+				},
+			},
+		},
+	}
+
+	// Set the ownerRef for the PVC
+	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/owners-dependents/
+	if err := ctrl.SetControllerReference(ghostblog, pvc, r.Scheme); err != nil {
+		return nil, err
+	}
+	return pvc, nil
 }
 
 // labelsForGhostBlog returns the labels for selecting the resources
@@ -410,6 +472,54 @@ func imageForGhostBlog(imageFromCrd string) (string, error) {
 	}
 
 	return image, nil
+}
+
+func envVariablesForGhostBlog(ghostblog *cmsv1alpha1.GhostBlog) []corev1.EnvVar {
+	var envs []corev1.EnvVar
+
+	envs = append(envs, corev1.EnvVar{
+		Name:  "database__client",
+		Value: ghostblog.Spec.Config.Database.Client,
+	})
+
+	if ghostblog.Spec.Config.Database.Connection.Filename != "" {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "database__connection__filename",
+			Value: ghostblog.Spec.Config.Database.Connection.Filename,
+		})
+	}
+
+	return envs
+}
+
+func volumeForGhostBlog(ghostblog *cmsv1alpha1.GhostBlog) []corev1.Volume {
+	var volumes []corev1.Volume
+
+	if ghostblog.Spec.Persistent.Enabled {
+		volumes = append(volumes, corev1.Volume{
+			Name: "ghostblog-data",
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: ghostblog.Name + "-pvc",
+				},
+			},
+		})
+	}
+
+	return volumes
+}
+
+func volumeMountsForGhostBlog(ghostblog *cmsv1alpha1.GhostBlog) []corev1.VolumeMount {
+	var volumeMounts []corev1.VolumeMount
+
+	if ghostblog.Spec.Persistent.Enabled {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      "ghostblog-data",
+			MountPath: "/var/lib/ghost/content",
+		})
+	}
+
+	return volumeMounts
 }
 
 // SetupWithManager sets up the controller with the Manager.
