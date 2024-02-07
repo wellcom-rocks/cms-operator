@@ -20,4 +20,13 @@ resources:
   kind: GhostBlog
   path: github.com/wellcom-rocks/cms-operator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: wellcom.rocks
+  group: cms
+  kind: Wordpress
+  path: github.com/wellcom-rocks/cms-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"

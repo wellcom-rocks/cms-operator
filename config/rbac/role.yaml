@@ -43,6 +43,32 @@ rules:
   - patch
   - update
 - apiGroups:
+  - cms.wellcom.rocks
+  resources:
+  - wordpresses
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cms.wellcom.rocks
+  resources:
+  - wordpresses/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - cms.wellcom.rocks
+  resources:
+  - wordpresses/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - ""
   resources:
   - events
