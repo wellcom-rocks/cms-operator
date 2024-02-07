@@ -1,0 +1,64 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+  name: cms-operator.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: GhostBlog is the Schema for the ghostblogs API
+      displayName: Ghost Blog
+      kind: GhostBlog
+      name: ghostblogs.cms.wellcom.rocks
+      specDescriptors:
+      - description: Port defines the port that will be used to init the container
+          with the image
+        displayName: Container Port
+        path: containerPort
+      - description: Image defines the image that will be used to init the container
+        displayName: Image
+        path: image
+      - description: Size defines the number of GhostBlog instances
+        displayName: Size
+        path: size
+      statusDescriptors:
+      - description: Conditions store the status conditions of the GhostBlog instances
+        displayName: Conditions
+        path: conditions
+      version: v1alpha1
+  description: 'Provides CMS like: Ghost, Wordpress'
+  displayName: CMS Operator
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - cms
+  - ghost
+  - wordpress
+  links:
+  - name: Cms Operator
+    url: https://cms-operator.domain
+  maintainers:
+  - email: moin@wellnitz-alex.de
+    name: alexohneander
+  maturity: alpha
+  provider:
+    name: Wellcom.
+  version: 0.0.0
