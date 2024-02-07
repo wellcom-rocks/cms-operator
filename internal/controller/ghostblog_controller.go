@@ -63,6 +63,8 @@ type GhostBlogReconciler struct {
 //+kubebuilder:rbac:groups=cms.wellcom.rocks,resources=ghostblogs/finalizers,verbs=update
 //+kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=apps,resources=services,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
 
 func (r *GhostBlogReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
