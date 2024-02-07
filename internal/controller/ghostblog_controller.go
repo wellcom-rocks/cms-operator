@@ -595,6 +595,8 @@ func (r *GhostBlogReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&cmsv1alpha1.GhostBlog{}).
 		Owns(&appsv1.Deployment{}).
+		Owns(&corev1.PersistentVolumeClaim{}).
+		Owns(&corev1.Service{}).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 2}).
 		Complete(r)
 }
