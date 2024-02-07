@@ -2,9 +2,13 @@
 
 [![Go](https://github.com/wellcom-rocks/cms-operator/actions/workflows/go.yml/badge.svg?branch=main)](https://github.com/wellcom-rocks/cms-operator/actions/workflows/go.yml)
 
-This project is a Kubernetes operator for managing CMS instances.
+Welcome to the CMS Operator project! This is a Kubernetes operator designed to simplify the deployment and management of CMS instances like Ghost and WordPress in a Kubernetes environment.
 
 ## Description
+
+The CMS Operator is a powerful tool that abstracts the complexities of deploying and managing CMS instances in Kubernetes. It leverages the power of Kubernetes Operators to automate tasks related to managing CMS instances, such as installation, updates, backups, and scaling.
+
+Whether you're running a single blog or managing multiple sites, the CMS Operator makes it easy to deploy, manage, and scale your CMS instances. It's designed to work with popular CMS platforms like Ghost and WordPress, with more to be added in the future.
 
 ## Getting Started
 
