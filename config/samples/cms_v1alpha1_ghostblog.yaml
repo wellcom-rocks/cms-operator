@@ -21,3 +21,12 @@ spec:
   persistent:
     enabled: true
     size: 5Gi
+  ingress:
+    enabled: true
+    annotations:
+      kubernetes.io/ingress.class: nginx
+    tls:
+      enabled: false
+      secretName: ghost-tls
+    hosts:
+      - ghost.example.com

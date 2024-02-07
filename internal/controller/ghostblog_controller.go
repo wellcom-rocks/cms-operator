@@ -25,6 +25,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -65,6 +66,7 @@ type GhostBlogReconciler struct {
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
 
 func (r *GhostBlogReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -299,6 +301,43 @@ func (r *GhostBlogReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	// Check if Ingress already exists, if not create a new one
+	foundIngress := &networkv1.Ingress{}
+	err = r.Get(ctx, types.NamespacedName{Name: ghostblog.Name, Namespace: ghostblog.Namespace}, foundIngress)
+	if err != nil && apierrors.IsNotFound(err) {
+		// Define a new Ingress
+		ing, err := r.ingressForGhostBlog(ghostblog)
+		if err != nil {
+			log.Error(err, "Failed to define new Ingress resource for GhostBlog")
+
+			// The following implementation will update the status
+			meta.SetStatusCondition(&ghostblog.Status.Conditions, metav1.Condition{Type: typeAvailableGhostBlog,
+				Status: metav1.ConditionFalse, Reason: "Reconciling",
+				Message: fmt.Sprintf("Failed to create Ingress for the custom resource (%s): (%s)", ghostblog.Name, err)})
+			if err := r.Status().Update(ctx, ghostblog); err != nil {
+				log.Error(err, "Failed to update GhostBlog status")
+				return ctrl.Result{}, err
+			}
+
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Creating a new Ingress", "Ingress.Namespace", ing.Namespace, "Ingress.Name", ing.Name)
+		if err = r.Create(ctx, ing); err != nil {
+			log.Error(err, "Failed to create new Ingress", "Ingress.Namespace", ing.Namespace, "Ingress.Name", ing.Name)
+			return ctrl.Result{}, err
+		}
+
+		// Ingress created successfully
+		// We will requeue the reconciliation so that we can ensure the state
+		// and move forward for the next operations
+		return ctrl.Result{RequeueAfter: time.Minute}, nil
+	} else if err != nil {
+		log.Error(err, "Failed to get Ingress")
+		// Let's return the error for the reconciliation be re-trigged again
+		return ctrl.Result{}, err
+	}
+
 	// The CRD API is defining that the GhostBlog type, have a GhostBlogSpec.Size field
 	// to set the quantity of Deployment instances is the desired state on the cluster.
 	// Therefore, the following code will ensure the Deployment size is the same as defined
@@ -510,6 +549,74 @@ func (r *GhostBlogReconciler) serviceForGhostBlog(
 	return svc, nil
 }
 
+func (r *GhostBlogReconciler) ingressForGhostBlog(
+	ghostblog *cmsv1alpha1.GhostBlog) (*networkv1.Ingress, error) {
+
+	pathType := networkv1.PathTypePrefix
+
+	annotations := map[string]string{}
+	if ghostblog.Spec.Ingress.Annotations != nil {
+		annotations = ghostblog.Spec.Ingress.Annotations
+	}
+
+	tls := []networkv1.IngressTLS{}
+	if ghostblog.Spec.Ingress.TLS.Enabled {
+		tls = append(tls, networkv1.IngressTLS{
+			Hosts:      ghostblog.Spec.Ingress.Hosts,
+			SecretName: ghostblog.Spec.Ingress.TLS.SecretName,
+		})
+	}
+
+	hosts := []string{}
+	if ghostblog.Spec.Ingress.Hosts != nil {
+		hosts = ghostblog.Spec.Ingress.Hosts
+	}
+
+	rules := []networkv1.IngressRule{}
+	for _, host := range hosts {
+		rules = append(rules, networkv1.IngressRule{
+			Host: host,
+			IngressRuleValue: networkv1.IngressRuleValue{
+				HTTP: &networkv1.HTTPIngressRuleValue{
+					Paths: []networkv1.HTTPIngressPath{
+						{
+							PathType: &pathType,
+							Path:     "/",
+							Backend: networkv1.IngressBackend{
+								Service: &networkv1.IngressServiceBackend{
+									Name: ghostblog.Name,
+									Port: networkv1.ServiceBackendPort{
+										Number: ghostblog.Spec.ContainerPort,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+	}
+
+	ing := &networkv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        ghostblog.Name,
+			Namespace:   ghostblog.Namespace,
+			Annotations: annotations,
+		},
+		Spec: networkv1.IngressSpec{
+			Rules: rules,
+			TLS:   tls,
+		},
+	}
+
+	// Set the ownerRef for the Ingress
+	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/owners-dependents/
+	if err := ctrl.SetControllerReference(ghostblog, ing, r.Scheme); err != nil {
+		return nil, err
+	}
+	return ing, nil
+}
+
 // labelsForGhostBlog returns the labels for selecting the resources
 // More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
 func labelsForGhostBlog(name string, imageFromCrd string) map[string]string {
@@ -559,6 +666,13 @@ func envVariablesForGhostBlog(ghostblog *cmsv1alpha1.GhostBlog) []corev1.EnvVar 
 		})
 	}
 
+	if ghostblog.Spec.Config.URL != "" {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "url",
+			Value: ghostblog.Spec.Config.URL,
+		})
+	}
+
 	return envs
 }
 
@@ -599,6 +713,7 @@ func (r *GhostBlogReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&corev1.Service{}).
+		Owns(&networkv1.Ingress{}).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 2}).
 		Complete(r)
 }
