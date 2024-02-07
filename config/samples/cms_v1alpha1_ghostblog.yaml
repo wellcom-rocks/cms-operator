@@ -1,0 +1,12 @@
+apiVersion: cms.wellcom.rocks/v1alpha1
+kind: GhostBlog
+metadata:
+  labels:
+    app.kubernetes.io/name: ghostblog
+    app.kubernetes.io/instance: ghostblog-sample
+    app.kubernetes.io/part-of: cms-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: cms-operator
+  name: ghostblog-sample
+spec:
+  # TODO(user): Add fields here

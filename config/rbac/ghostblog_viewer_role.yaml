@@ -1,0 +1,27 @@
+# permissions for end users to view ghostblogs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: ghostblog-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: cms-operator
+    app.kubernetes.io/part-of: cms-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: ghostblog-viewer-role
+rules:
+- apiGroups:
+  - cms.wellcom.rocks
+  resources:
+  - ghostblogs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - cms.wellcom.rocks
+  resources:
+  - ghostblogs/status
+  verbs:
+  - get
